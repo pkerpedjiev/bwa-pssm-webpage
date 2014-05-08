@@ -1,0 +1,146 @@
+
+<!DOCTYPE html>
+<html>
+<title>BWA-PSSM</title>
+
+<xmp theme="readable" style="display:none;">
+
+### Overview
+
+BWA-PSSM is a probabilistic short read aligner based on the use of position specific scoring matrices (PSSM). Like many of the existing aligners it is fast and sensitive. Unlike most other aligners, however, it also adaptible in the sense that one can direct the alignment based on known biases within the data set. It is coded as a modification of the original [BWA alignment program](http://bio-bwa.sourceforge.net/) and shares the genome index structure as well as many of the command line options. Shown below are common and uncommon usage scenarios.
+
+### Download
+
+Get the latest version from the [github repository](https://github.com/pkerpedjiev/bwa-pssm). Note that [version 1.6 of the GDSL library](http://home.gna.org/gdsl) needs to be installed in order for bwa-pssm to compile.
+
+### Usage
+
+PSSM-BWA can be used just like the original BWA aligner. In addition to aligning fastq formatted reads, it has the option of reading raw position specific scoring matrices and performing an alignment by scoring with them.
+
+### Examples
+
+##### Building an index
+
+Exactly like the original bwa aligner. 
+
+
+    bwa index -a div  -p indeces/bwa/short19 /fa/short19.fa
+
+The '-a div' option is actually only necessary when trying to create an index for very large genomes (> 4GB). Omitting it on smaller genomes will have no adverse effect on the creation of the index.
+
+##### Aligning a fastq file using pssm-based quality aware alignment
+
+Much like the original BWA, except instead of the 'aln' command, the 'pssm' command is used:
+
+    bwa pssm indexes/bwa/short19 test.fastq > out.sai
+
+##### More thorough alignment
+
+In cases when time is not a limitation, one may be inclined to perform a more thorough alignment. This simply means that more suboptimal partial alignments are tried before the search gives up. The degree to which less likely alignments are tried can be adjusted using the '-m' option. In actuality this sets the size of the interval heap which keeps track of the highest scoring partial alignments currently being considered for further scoring.  To do a slower, more thorough search, one would increase the size of this heap. The default value is 400.
+
+    bwa pssm -m 800 indexes/bwa/short19 test.fastq > out.sai
+
+##### Converting the alignment coordinates to a SAM file </h5>
+
+Again, just like the original:
+
+    bwa samse indexes/bwa/short19 test.sai test.fastq > out.sam
+
+##### Alignment and conversion to SAM format in one step:
+
+This is useful if trying to avoid the use of an intermediate file in the alignment process.
+
+    bwa pssm indexes/bwa/short19 test.fastq | ./bwa samse \
+    indexes/bwa/short19 - test.fastq > out.sam
+
+##### Converting a FASTQ file to a PSSM manually
+
+An example for converting a fastq file to a PSSM is provided in the fastq2wm.pl file. The execution of this file also introduces an error model (as described in the paper below) for 5' C to T damage and 3' G to A damage. To try this conversion script, run the following command:
+
+    cat damaged.fastq | ./fastq2wm33.pl > damaged.pssm
+
+Once this is done, the resulting pssm file can be used to perform an alignment in the regular manner:
+
+    bwa pssm indexes/bwa/short19 damaged.fastq > out.sai
+
+##### Using an error model
+
+An error model is a way of specifying a conversion from a fastq file to a PSSM. For each quality value and nucleotide type, a set of PSSM values can be specified. The example below illustrates the concept with an error model for reads that originated from a PAR-CLIP experiment.
+
+    39 A 2.00 -12.77 -12.54 -12.34
+    39 C -12.54 1.77 -12.54 -0.74
+    39 G -12.54 -12.77 2.00 -12.34
+    39 T -12.54 -12.77 -12.54 2.00
+    40 A 2.00 -13.10 -12.87 -12.67
+    40 C -12.87 1.77 -12.87 -0.74
+    40 G -12.87 -13.10 2.00 -12.67
+    40 T -12.87 -13.10 -12.87 2.00
+
+The leftmost two columns indicate the quality score and called base for which this PSSM column applies. The bottommost line, '41 T -13.20', therefore, will be used when a base 'T' with the highest possible quality score is found. So if we take an imaginary read like this:
+
+    @READ_NAME_XXX
+    ACT
+    +chr3_+_60998148
+    IIH
+
+Then the first base will be replaced by the line '40 A ...', the second with '40 C ...' and the final with the line '39 T ...', yielding the following PSSM:
+
+           1       2       3
+    A   2.00  -12.87  -12.54
+    C -12.87    1.77  -12.77 
+    G -12.87  -12.87  -12.54
+    T -12.67   -0.74    2.00
+
+What is evident in this table is that the score for finding a T where the read contained a C is much greater than typically allowed for such a mismatch. This is due to the prevalence of T to C mutations in PAR-CLIP experiments. Thus, when the read contains a C, the bias in the experimental procedure indicates that it is likely that the original genome contained a T. This is not the case when the called base is, for example, 'A' and no experimentally derived bias is observed. To run bwa-pssm with an error model, simply specify the file containing it with the '-G' option:
+
+    bwa pssm -G error_model.txt indexes/bwa/short19 test.fastq > out.sai
+
+##### PSSM as input
+
+One can also pass in the a raw PSSM as input to BWA-PSSM. The expected format is similar to the fastq format except in place of the sequence, the pssm is entered. Taking the PSSM generated in the previous example, the input would simply be:
+
+    @READ_NAME_XXX
+    ACT
+    +chr3_+_60998148
+      2.00  -12.87  -12.54
+    -12.87    1.77  -12.77
+    -12.87  -12.87  -12.54
+    -12.67   -0.74    2.00
+
+The sequence present in the second line of the prior example is completely irrelevant since all of the alignment information is derived from the PSSM itself. A sequence which is used for determining the number of mismatches (i.e. for limiting the seed search) can be inferred from the maximum scores of the PSSM. Alignment is done exactly as with a normal fastq file:
+
+    bwa pssm indexes/bwa/short19 test.pssm > out.sai
+
+##### Read Matching
+
+BWA-PSSM provides some extra options on top of the original BWA to provide for finer control over how the PSSM is scored over the genome. By default, BWA-PSSM takes the number of mismatches, m, that would be allowed by BWA and calculates the greatest total match and the least total mismatch score for a sequence of length m. The difference between the two is subtracted from the greatest possible PSSM score for the query sequence to yield a threshold for that sequence. Any regions of the genome that score greater than this threshold are considered hits and any below that threshold are discarded.
+
+As an example, assume we have a query of length 20 for which the greatest match score is 100. If we allow three mismatches, then the greatest match score for a sequence of length 3 could be 15 and the lowest mismatch score could be -30. This implies that any regions of the genome which score greater than 55 (100 - (15 - 30)) would be considered hits.
+
+As the criteria for a match is now dependent on the PSSM score, the number of actual mismatches is fixed at 30. If one wants to maintain some fixed limit on the number of mismatches and have a tighter limit on the PSSM score, then the `-z [int]` option can be used. This option tells BWA-PSSM to use a threshold equivalent to [int] high quality mismatches, while retaining the number of mismatches that BWA allows (which can be changed using the `-n` option).
+
+### How to Cite
+
+If you find this software useful in your research, please cite the following article:
+
+Kerpedjiev, P., Frellsen, J., Lindgreen, S., & Krogh, A. (2014). [Adaptable probabilistic mapping of short reads using position specific scoring matrices](http://dx.doi.org/10.1186/1471-2105-15-100). *BMC bioinformatics, 15*(1), 100.
+
+### Contact
+
+If you have any questions or issues, please don't hesitate to contact us at <bwa-pssm@binf.ku.dk>.
+
+</xmp>
+
+<script src="http://strapdownjs.com/v/0.2/strapdown.js"></script>
+
+<script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+                (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+              m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+                })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+                  ga('create', 'UA-40755006-1', 'univie.ac.at');
+                    ga('send', 'pageview');
+
+                </script>
+</html>
