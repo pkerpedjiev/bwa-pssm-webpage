@@ -110,7 +110,7 @@ Reads from PAR-CLIP sequences reflect the tendency to observe the T-to-C transit
 | \\(G_g\\) | 0 | 0 | 1 | 0 |
 | \\(T_g\\) | 0 | \\(\gamma\\) | 0 | 1 |
 
-At the same time, we can create a table describing the probabilities of a seeing a base in the sample given a base in the read (\\(P(a|x)\\)). These probabilities are encoded in the quality scores and describe the probability that a base is correctly called \\(p_c\\) and the probability that a base is incorrectly called \\(p_i=p_c / 3\\). This leads to the following probability matrix:
+At the same time, we can create a table describing the probabilities of a seeing a base in the sample given a base in the read (\\(P(a|x)\\)). These probabilities are encoded in the quality scores and describe the probability that a base is correctly called \\(p_c\\) and the probability that a base is incorrectly called \\(p_i=p_c / 3\\). This leads to the following probability matrix:		
 
 |   | \\(A_x\\) | \\(C_x\\) | \\(G_x\\) | \\(T_x\\) |
 |---|---|---|---|---|
@@ -130,7 +130,7 @@ Multiplying the two probability matrices gives precisely this result, the transp
 | \\(A_g\\) | \\(p_c\\) | \\(p_i\\) | \\(p_i\\) | \\(p_i\\) |
 | \\(C_g\\) | \\((1 - \gamma) * p_i\\) | \\((1 - \gamma) * p_c\\) | \\((1 - \gamma) * p_i\\) | \\((1- \gamma) * p_i\\) |
 | \\(G_g\\) | \\(p_i\\) | \\(p_i\\) | \\(p_c\\) | \\(p_i\\) |
-| \\(T_g\\) | \\((1 + \gamma) * p_i\\) | \\((1 + \gamma) * p_i\\) | \\((1 + \gamma) * p_i\\) | \\(p_i * \gamma + p_c\\) |
+| \\(T_g\\) | \\((1 + \gamma) * p_i\\) | \\(\gamma * p_c + p_i\\) | \\((1 + \gamma) * p_i\\) | \\(p_i * \gamma + p_c\\) |
 
 
 #### PSSM as input
