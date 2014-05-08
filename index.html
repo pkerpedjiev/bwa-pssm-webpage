@@ -19,7 +19,7 @@ PSSM-BWA can be used just like the original BWA aligner. In addition to aligning
 
 ### Examples
 
-##### Building an index
+#### Building an index
 
 Exactly like the original bwa aligner. 
 
@@ -28,32 +28,32 @@ Exactly like the original bwa aligner.
 
 The '-a div' option is actually only necessary when trying to create an index for very large genomes (> 4GB). Omitting it on smaller genomes will have no adverse effect on the creation of the index.
 
-##### Aligning a fastq file using pssm-based quality aware alignment
+#### Aligning a fastq file using pssm-based quality aware alignment
 
 Much like the original BWA, except instead of the 'aln' command, the 'pssm' command is used:
 
     bwa pssm indexes/bwa/short19 test.fastq > out.sai
 
-##### More thorough alignment
+#### More thorough alignment
 
 In cases when time is not a limitation, one may be inclined to perform a more thorough alignment. This simply means that more suboptimal partial alignments are tried before the search gives up. The degree to which less likely alignments are tried can be adjusted using the '-m' option. In actuality this sets the size of the interval heap which keeps track of the highest scoring partial alignments currently being considered for further scoring.  To do a slower, more thorough search, one would increase the size of this heap. The default value is 400.
 
     bwa pssm -m 800 indexes/bwa/short19 test.fastq > out.sai
 
-##### Converting the alignment coordinates to a SAM file </h5>
+#### Converting the alignment coordinates to a SAM file </h5>
 
 Again, just like the original:
 
     bwa samse indexes/bwa/short19 test.sai test.fastq > out.sam
 
-##### Alignment and conversion to SAM format in one step:
+#### Alignment and conversion to SAM format in one step:
 
 This is useful if trying to avoid the use of an intermediate file in the alignment process.
 
     bwa pssm indexes/bwa/short19 test.fastq | ./bwa samse \
     indexes/bwa/short19 - test.fastq > out.sam
 
-##### Converting a FASTQ file to a PSSM manually
+#### Converting a FASTQ file to a PSSM manually
 
 An example for converting a fastq file to a PSSM is provided in the fastq2wm.pl file. The execution of this file also introduces an error model (as described in the paper below) for 5' C to T damage and 3' G to A damage. To try this conversion script, run the following command:
 
@@ -63,7 +63,9 @@ Once this is done, the resulting pssm file can be used to perform an alignment i
 
     bwa pssm indexes/bwa/short19 damaged.fastq > out.sai
 
-##### Using an error model
+#### Error Models
+
+##### Using an Error Model
 
 An error model is a way of specifying a conversion from a fastq file to a PSSM. For each quality value and nucleotide type, a set of PSSM values can be specified. The example below illustrates the concept with an error model for reads that originated from a PAR-CLIP experiment.
 
@@ -95,7 +97,43 @@ What is evident in this table is that the score for finding a T where the read c
 
     bwa pssm -G error_model.txt indexes/bwa/short19 test.fastq > out.sai
 
-##### PSSM as input
+##### Creating an Error Model
+
+Creating an error model naturally depends on the types errors that one might expect. Here we will document how the error model for the PAR-CLIP data was created and hope that it serves as an example for other types of data.
+
+Reads from PAR-CLIP sequences reflect the tendency to observe the T-to-C transitions caused by the cross-linking experiment. We can denote this probability with the value \\(\gamma\\) and calculate the probability of seeing a particular base in the genome, given the identity of the base in the sample (\\(P(g|a)\\)). The genome bases are the the columns and the sample bases are the rows.
+
+|   | \\(A_a\\) | \\(C_a\\) | \\(G_a\\) | \\(T_a\\) |
+|---|---|---|---|---|
+| \\(A_g\\) | 1 | 0 | 0 | 0 |
+| \\(C_g\\)| 0 | 1 - \\(\gamma\\) | 0 | 0 |
+| \\(G_g\\) | 0 | 0 | 1 | 0 |
+| \\(T_g\\) | 0 | \\(\gamma\\) | 0 | 1 |
+
+At the same time, we can create a table describing the probabilities of a seeing a base in the sample given a base in the read (\\(P(a|x)\\)). These probabilities are encoded in the quality scores and describe the probability that a base is correctly called \\(p_c\\) and the probability that a base is incorrectly called \\(p_i=p_c / 3\\). This leads to the following probability matrix:
+
+|   | \\(A_x\\) | \\(C_x\\) | \\(G_x\\) | \\(T_x\\) |
+|---|---|---|---|---|
+| \\(A_a\\) | \\(p_c\\) | \\(p_i\\) | \\(p_i\\) | \\(p_i\\) |
+| \\(C_a\\) | \\(p_i\\) | \\(p_c\\) | \\(p_i\\) | \\(p_i\\) |
+| \\(G_a\\) | \\(p_i\\) | \\(p_i\\) | \\(p_c\\) | \\(p_i\\) |
+| \\(T_a\\) | \\(p_i\\) | \\(p_i\\) | \\(p_i\\) | \\(p_c\\) |
+
+To get the probability for a base in the genome, given a base in the read (\\(P(g|x)\\)) we can use Equation 3 from our [paper](http://www.biomedcentral.com/1471-2105/15/100). 
+
+$$P(g|x)=\sum_a{P(g|a)P(a|x)}$$
+
+Multiplying the two probability matrices gives precisely this result, the transpose of which is encoded as the rows of the error model.
+
+|   | \\(A_x\\) | \\(C_x\\) | \\(G_x\\) | \\(T_x\\) |
+|---|---|---|---|---|
+| \\(A_g\\) | \\(p_c\\) | \\(p_i\\) | \\(p_i\\) | \\(p_i\\) |
+| \\(C_g\\) | \\((1 - \gamma) * p_i\\) | \\((1 - \gamma) * p_c\\) | \\((1 - \gamma) * p_i\\) | \\((1- \gamma) * p_i\\) |
+| \\(G_g\\) | \\(p_i\\) | \\(p_i\\) | \\(p_c\\) | \\(p_i\\) |
+| \\(T_g\\) | \\((1 + \gamma) * p_i\\) | \\((1 + \gamma) * p_i\\) | \\((1 + \gamma) * p_i\\) | \\(p_i * \gamma + p_c\\) |
+
+
+#### PSSM as input
 
 One can also pass in the a raw PSSM as input to BWA-PSSM. The expected format is similar to the fastq format except in place of the sequence, the pssm is entered. Taking the PSSM generated in the previous example, the input would simply be:
 
@@ -111,7 +149,7 @@ The sequence present in the second line of the prior example is completely irrel
 
     bwa pssm indexes/bwa/short19 test.pssm > out.sai
 
-##### Read Matching
+#### Read Matching
 
 BWA-PSSM provides some extra options on top of the original BWA to provide for finer control over how the PSSM is scored over the genome. By default, BWA-PSSM takes the number of mismatches, m, that would be allowed by BWA and calculates the greatest total match and the least total mismatch score for a sequence of length m. The difference between the two is subtracted from the greatest possible PSSM score for the query sequence to yield a threshold for that sequence. Any regions of the genome that score greater than this threshold are considered hits and any below that threshold are discarded.
 
@@ -131,7 +169,9 @@ If you have any questions or issues, please don't hesitate to contact us at <bwa
 
 </xmp>
 
+<script type="text/javascript" src="//cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
 <script src="http://strapdownjs.com/v/0.2/strapdown.js"></script>
+
 
 <script>
       (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
